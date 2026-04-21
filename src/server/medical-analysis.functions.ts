@@ -243,7 +243,7 @@ RULES:
 
 export const lookupMedicine = createServerFn({ method: "POST" })
   .inputValidator((raw: unknown) => MedicineRequestSchema.parse(raw))
-  .handler(async ({ data }) => {
+  .handler(async ({ data }): Promise<{ medicine: Record<string, unknown> | null; error: string | null }> => {
     const apiKey = process.env.LOVABLE_API_KEY;
     if (!apiKey) {
       return { medicine: null, error: "LOVABLE_API_KEY is not configured" };
@@ -273,14 +273,14 @@ export const lookupMedicine = createServerFn({ method: "POST" })
       }
       const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
       const content = json.choices?.[0]?.message?.content ?? "{}";
-      let parsed: unknown;
+      let parsed: Record<string, unknown> | null = null;
       try {
-        parsed = JSON.parse(content);
+        parsed = JSON.parse(content) as Record<string, unknown>;
       } catch {
         const m = content.match(/\{[\s\S]*\}/);
-        parsed = m ? JSON.parse(m[0]) : null;
+        parsed = m ? (JSON.parse(m[0]) as Record<string, unknown>) : null;
       }
-      return { medicine: parsed, error: null as string | null };
+      return { medicine: parsed, error: null };
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       console.error("lookupMedicine failed:", message);
