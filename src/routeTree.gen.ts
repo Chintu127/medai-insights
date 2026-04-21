@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as UploadRouteImport } from './routes/upload'
 import { Route as ResultsRouteImport } from './routes/results'
 import { Route as ProcessingRouteImport } from './routes/processing'
+import { Route as MedicinesRouteImport } from './routes/medicines'
 import { Route as AssistantRouteImport } from './routes/assistant'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiChatRouteImport } from './routes/api.chat'
@@ -29,6 +30,11 @@ const ResultsRoute = ResultsRouteImport.update({
 const ProcessingRoute = ProcessingRouteImport.update({
   id: '/processing',
   path: '/processing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MedicinesRoute = MedicinesRouteImport.update({
+  id: '/medicines',
+  path: '/medicines',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AssistantRoute = AssistantRouteImport.update({
@@ -50,6 +56,7 @@ const ApiChatRoute = ApiChatRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/assistant': typeof AssistantRoute
+  '/medicines': typeof MedicinesRoute
   '/processing': typeof ProcessingRoute
   '/results': typeof ResultsRoute
   '/upload': typeof UploadRoute
@@ -58,6 +65,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/assistant': typeof AssistantRoute
+  '/medicines': typeof MedicinesRoute
   '/processing': typeof ProcessingRoute
   '/results': typeof ResultsRoute
   '/upload': typeof UploadRoute
@@ -67,6 +75,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/assistant': typeof AssistantRoute
+  '/medicines': typeof MedicinesRoute
   '/processing': typeof ProcessingRoute
   '/results': typeof ResultsRoute
   '/upload': typeof UploadRoute
@@ -77,16 +86,25 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/assistant'
+    | '/medicines'
     | '/processing'
     | '/results'
     | '/upload'
     | '/api/chat'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/assistant' | '/processing' | '/results' | '/upload' | '/api/chat'
+  to:
+    | '/'
+    | '/assistant'
+    | '/medicines'
+    | '/processing'
+    | '/results'
+    | '/upload'
+    | '/api/chat'
   id:
     | '__root__'
     | '/'
     | '/assistant'
+    | '/medicines'
     | '/processing'
     | '/results'
     | '/upload'
@@ -96,6 +114,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AssistantRoute: typeof AssistantRoute
+  MedicinesRoute: typeof MedicinesRoute
   ProcessingRoute: typeof ProcessingRoute
   ResultsRoute: typeof ResultsRoute
   UploadRoute: typeof UploadRoute
@@ -125,6 +144,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProcessingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/medicines': {
+      id: '/medicines'
+      path: '/medicines'
+      fullPath: '/medicines'
+      preLoaderRoute: typeof MedicinesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/assistant': {
       id: '/assistant'
       path: '/assistant'
@@ -152,6 +178,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AssistantRoute: AssistantRoute,
+  MedicinesRoute: MedicinesRoute,
   ProcessingRoute: ProcessingRoute,
   ResultsRoute: ResultsRoute,
   UploadRoute: UploadRoute,

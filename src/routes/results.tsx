@@ -5,13 +5,15 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
+  Download,
   FlaskConical,
   HeartPulse,
   Pill,
   Stethoscope,
 } from "lucide-react";
 import { useMedicalState } from "@/lib/medical-store";
-import type { AIAnalysisResult } from "@/lib/medical-types";
+import type { AIAnalysisResult, LabValue } from "@/lib/medical-types";
+import { generateMedicalReportPDF } from "@/lib/pdf-report";
 
 export const Route = createFileRoute("/results")({
   head: () => ({
@@ -31,7 +33,14 @@ function pickRisk(level: string | undefined): "low" | "medium" | "high" {
 }
 
 function ResultsPage() {
-  const { result, status } = useMedicalState();
+  const { result, status, request } = useMedicalState();
+
+  const downloadPDF = () => {
+    if (!result) return;
+    const doc = generateMedicalReportPDF(result, request);
+    const safeName = (request?.patient.name || "patient").replace(/[^a-z0-9_-]/gi, "_") || "patient";
+    doc.save(`medai-report-${safeName}-${Date.now()}.pdf`);
+  };
 
   if (!result) {
     return (
@@ -66,12 +75,20 @@ function ResultsPage() {
             Dual-AI verification by Gemini and GPT — possible conditions, not a diagnosis.
           </p>
         </div>
-        <Link
-          to="/upload"
-          className="text-sm inline-flex items-center gap-1.5 px-4 h-10 rounded-lg border border-border hover:bg-muted"
-        >
-          New analysis <ArrowRight className="size-4" />
-        </Link>
+        <div className="flex gap-2">
+          <button
+            onClick={downloadPDF}
+            className="text-sm inline-flex items-center gap-1.5 px-4 h-10 rounded-lg gradient-primary text-white font-medium glow"
+          >
+            <Download className="size-4" /> Download PDF
+          </button>
+          <Link
+            to="/upload"
+            className="text-sm inline-flex items-center gap-1.5 px-4 h-10 rounded-lg border border-border hover:bg-muted"
+          >
+            New analysis <ArrowRight className="size-4" />
+          </Link>
+        </div>
       </header>
 
       <div className="rounded-xl border border-warning/40 bg-warning/10 text-warning-foreground p-3 text-xs flex items-start gap-2">
@@ -91,6 +108,8 @@ function ResultsPage() {
       <ComparisonPanel gemini={gemini} gpt={gpt} disagreement={comparison.disagreement_notes} />
 
       <ConditionsSection gemini={gemini} gpt={gpt} />
+
+      <ParsedLabsSection labs={gemini.parsed_labs ?? gpt.parsed_labs ?? []} />
 
       <LabValuesTable extracted={gemini.extracted_data ?? {}} abnormal={gemini.abnormal_findings ?? []} />
 
@@ -336,6 +355,59 @@ function LabValuesTable({
           </ul>
         </div>
       )}
+    </section>
+  );
+}
+
+function ParsedLabsSection({ labs }: { labs: LabValue[] }) {
+  if (!labs || labs.length === 0) return null;
+  const statusStyle = (s?: string) => {
+    const v = (s ?? "").toLowerCase();
+    if (v.includes("critical")) return "bg-destructive/20 text-destructive";
+    if (v.includes("high") || v.includes("low") || v.includes("abnormal"))
+      return "bg-warning/20 text-warning";
+    return "bg-success/15 text-success";
+  };
+  return (
+    <section className="glass-card rounded-2xl p-5 md:p-6 space-y-4">
+      <h2 className="font-display text-lg font-semibold flex items-center gap-2">
+        <FlaskConical className="size-4 text-medical" /> Parsed lab parameters
+      </h2>
+      <div className="overflow-x-auto -mx-2">
+        <table className="w-full text-sm min-w-[640px]">
+          <thead>
+            <tr className="text-left text-xs uppercase text-muted-foreground border-b border-border">
+              <th className="px-3 py-2 font-medium">Parameter</th>
+              <th className="px-3 py-2 font-medium">Value</th>
+              <th className="px-3 py-2 font-medium">Reference range</th>
+              <th className="px-3 py-2 font-medium">Status</th>
+              <th className="px-3 py-2 font-medium">Interpretation</th>
+            </tr>
+          </thead>
+          <tbody>
+            {labs.map((lab, i) => (
+              <tr key={i} className="border-b border-border/60 last:border-0 align-top">
+                <td className="px-3 py-2 font-medium">{lab.name}</td>
+                <td className="px-3 py-2 font-mono whitespace-nowrap">
+                  {lab.value}
+                  {lab.unit ? ` ${lab.unit}` : ""}
+                </td>
+                <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                  {lab.reference_range || "—"}
+                </td>
+                <td className="px-3 py-2">
+                  <span className={`text-[11px] px-2 py-0.5 rounded-full ${statusStyle(lab.status)}`}>
+                    {lab.status || "—"}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-xs text-muted-foreground">
+                  {lab.interpretation || "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
