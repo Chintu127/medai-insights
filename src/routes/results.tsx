@@ -68,12 +68,20 @@ function ResultsPage() {
             Dual-AI verification by Gemini and GPT — possible conditions, not a diagnosis.
           </p>
         </div>
-        <Link
-          to="/upload"
-          className="text-sm inline-flex items-center gap-1.5 px-4 h-10 rounded-lg border border-border hover:bg-muted"
-        >
-          New analysis <ArrowRight className="size-4" />
-        </Link>
+        <div className="flex gap-2">
+          <button
+            onClick={downloadPDF}
+            className="text-sm inline-flex items-center gap-1.5 px-4 h-10 rounded-lg gradient-primary text-white font-medium glow"
+          >
+            <Download className="size-4" /> Download PDF
+          </button>
+          <Link
+            to="/upload"
+            className="text-sm inline-flex items-center gap-1.5 px-4 h-10 rounded-lg border border-border hover:bg-muted"
+          >
+            New analysis <ArrowRight className="size-4" />
+          </Link>
+        </div>
       </header>
 
       <div className="rounded-xl border border-warning/40 bg-warning/10 text-warning-foreground p-3 text-xs flex items-start gap-2">
@@ -93,6 +101,8 @@ function ResultsPage() {
       <ComparisonPanel gemini={gemini} gpt={gpt} disagreement={comparison.disagreement_notes} />
 
       <ConditionsSection gemini={gemini} gpt={gpt} />
+
+      <ParsedLabsSection labs={gemini.parsed_labs ?? gpt.parsed_labs ?? []} />
 
       <LabValuesTable extracted={gemini.extracted_data ?? {}} abnormal={gemini.abnormal_findings ?? []} />
 
