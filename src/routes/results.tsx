@@ -33,7 +33,14 @@ function pickRisk(level: string | undefined): "low" | "medium" | "high" {
 }
 
 function ResultsPage() {
-  const { result, status } = useMedicalState();
+  const { result, status, request } = useMedicalState();
+
+  const downloadPDF = () => {
+    if (!result) return;
+    const doc = generateMedicalReportPDF(result, request);
+    const safeName = (request?.patient.name || "patient").replace(/[^a-z0-9_-]/gi, "_") || "patient";
+    doc.save(`medai-report-${safeName}-${Date.now()}.pdf`);
+  };
 
   if (!result) {
     return (
