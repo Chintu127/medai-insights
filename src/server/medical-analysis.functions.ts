@@ -32,10 +32,20 @@ STRICT RULES:
 
 Schema:
 {
-  "extracted_data": { ... key/value lab + vitals ... },
-  "abnormal_findings": [ "..." ],
+  "extracted_data": { "<param>": "<raw value with unit>" },
+  "parsed_labs": [
+    {
+      "name": "Glucose (Fasting)",
+      "value": "186",
+      "unit": "mg/dL",
+      "reference_range": "70-99 mg/dL",
+      "status": "Normal | Low | High | Critical",
+      "interpretation": "Suggestive of hyperglycemia / possible diabetes"
+    }
+  ],
+  "abnormal_findings": [ "Concise human-readable abnormal findings" ],
   "possible_conditions": [ { "name":"", "probability":"e.g. 72%", "reasoning":"" } ],
-  "risk_level": "Low" | "Medium" | "High",
+  "risk_level": "Low | Medium | High",
   "confidence_score": "0-100",
   "recommended_tests": [ "..." ],
   "medications_suggestion": [ "generic name - purpose" ],
@@ -43,6 +53,13 @@ Schema:
   "warnings": [ "..." ],
   "doctor_recommendation": "e.g. Endocrinologist"
 }
+
+PARSING REQUIREMENTS for parsed_labs:
+- Extract every numerical lab parameter you can find from text or the image.
+- Always include unit and standard adult reference_range when known.
+- Compare value vs range and assign status: Normal / Low / High / Critical.
+- For each abnormal lab, briefly state clinical interpretation.
+- If no labs are found, return parsed_labs: [].
 
 Rank top 3 possible_conditions by probability. Use clinical reasoning (e.g. high glucose -> consider diabetes; low hemoglobin -> anemia; combine multi-parameter findings).`;
 
@@ -62,7 +79,7 @@ ${input.symptoms || "None reported"}
 Lab Report (text, may be empty if image provided):
 ${input.labReportText || "(none)"}
 
-Return ONLY the JSON object, no markdown fences.`;
+Return ONLY the JSON object, no markdown fences. Be thorough with parsed_labs.`;
   parts.push({ type: "text", text });
 
   if (input.labReportImageBase64 && input.labReportMimeType?.startsWith("image/")) {
@@ -193,5 +210,80 @@ export const analyzeMedical = createServerFn({ method: "POST" })
         comparison: null,
         error: message,
       };
+    }
+  });
+
+// =====================================================
+// Medicine lookup — what is this drug for & which diseases
+// =====================================================
+
+const MedicineRequestSchema = z.object({
+  query: z.string().min(1).max(200),
+});
+
+const MEDICINE_SYSTEM = `You are a pharmaceutical AI assistant. For the medicine name provided, return STRICT JSON:
+{
+  "name": "<as provided>",
+  "generic_name": "",
+  "drug_class": "",
+  "used_for": ["primary indications"],
+  "diseases": ["specific diseases this medicine treats or is commonly used in"],
+  "dosage_form": "tablet | capsule | syrup | injection | topical | inhaler",
+  "mechanism": "1-2 sentence mechanism of action",
+  "common_side_effects": ["..."],
+  "contraindications": ["..."],
+  "safety_note": "important caution in 1-2 sentences",
+  "image_query": "high resolution image search query for this medicine"
+}
+RULES:
+- Use generic names where possible.
+- Do NOT provide prescription dosages.
+- If the medicine is unknown, return name with empty strings/arrays and safety_note: "Medicine not recognized. Verify spelling or consult a pharmacist."
+- Return ONLY the JSON.`;
+
+export const lookupMedicine = createServerFn({ method: "POST" })
+  .inputValidator((raw: unknown) => MedicineRequestSchema.parse(raw))
+  .handler(async ({ data }) => {
+    const apiKey = process.env.LOVABLE_API_KEY;
+    if (!apiKey) {
+      return { medicine: null, error: "LOVABLE_API_KEY is not configured" };
+    }
+    try {
+      const res = await fetch(GATEWAY_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: MEDICINE_SYSTEM },
+            { role: "user", content: `Medicine: ${data.query}\nReturn the JSON only.` },
+          ],
+          response_format: { type: "json_object" },
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        if (res.status === 429) return { medicine: null, error: "Rate limit reached. Please wait." };
+        if (res.status === 402)
+          return { medicine: null, error: "AI credits exhausted. Add credits in Workspace > Usage." };
+        return { medicine: null, error: `Gateway error (${res.status}): ${body.slice(0, 200)}` };
+      }
+      const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+      const content = json.choices?.[0]?.message?.content ?? "{}";
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(content);
+      } catch {
+        const m = content.match(/\{[\s\S]*\}/);
+        parsed = m ? JSON.parse(m[0]) : null;
+      }
+      return { medicine: parsed, error: null as string | null };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      console.error("lookupMedicine failed:", message);
+      return { medicine: null, error: message };
     }
   });
