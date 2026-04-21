@@ -53,7 +53,7 @@ function MedicinesPage() {
       if (res.error || !res.medicine) {
         setError(res.error ?? "No information returned.");
       } else {
-        setMedicine(res.medicine as MedicineInfo);
+        setMedicine(res.medicine as unknown as MedicineInfo);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Lookup failed");
