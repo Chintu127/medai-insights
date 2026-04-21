@@ -10,7 +10,9 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UploadRouteImport } from './routes/upload'
+import { Route as ResultsRouteImport } from './routes/results'
 import { Route as ProcessingRouteImport } from './routes/processing'
+import { Route as AssistantRouteImport } from './routes/assistant'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiChatRouteImport } from './routes/api.chat'
 
@@ -19,9 +21,19 @@ const UploadRoute = UploadRouteImport.update({
   path: '/upload',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ResultsRoute = ResultsRouteImport.update({
+  id: '/results',
+  path: '/results',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProcessingRoute = ProcessingRouteImport.update({
   id: '/processing',
   path: '/processing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AssistantRoute = AssistantRouteImport.update({
+  id: '/assistant',
+  path: '/assistant',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -37,34 +49,55 @@ const ApiChatRoute = ApiChatRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/assistant': typeof AssistantRoute
   '/processing': typeof ProcessingRoute
+  '/results': typeof ResultsRoute
   '/upload': typeof UploadRoute
   '/api/chat': typeof ApiChatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/assistant': typeof AssistantRoute
   '/processing': typeof ProcessingRoute
+  '/results': typeof ResultsRoute
   '/upload': typeof UploadRoute
   '/api/chat': typeof ApiChatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/assistant': typeof AssistantRoute
   '/processing': typeof ProcessingRoute
+  '/results': typeof ResultsRoute
   '/upload': typeof UploadRoute
   '/api/chat': typeof ApiChatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/processing' | '/upload' | '/api/chat'
+  fullPaths:
+    | '/'
+    | '/assistant'
+    | '/processing'
+    | '/results'
+    | '/upload'
+    | '/api/chat'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/processing' | '/upload' | '/api/chat'
-  id: '__root__' | '/' | '/processing' | '/upload' | '/api/chat'
+  to: '/' | '/assistant' | '/processing' | '/results' | '/upload' | '/api/chat'
+  id:
+    | '__root__'
+    | '/'
+    | '/assistant'
+    | '/processing'
+    | '/results'
+    | '/upload'
+    | '/api/chat'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AssistantRoute: typeof AssistantRoute
   ProcessingRoute: typeof ProcessingRoute
+  ResultsRoute: typeof ResultsRoute
   UploadRoute: typeof UploadRoute
   ApiChatRoute: typeof ApiChatRoute
 }
@@ -78,11 +111,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof UploadRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/results': {
+      id: '/results'
+      path: '/results'
+      fullPath: '/results'
+      preLoaderRoute: typeof ResultsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/processing': {
       id: '/processing'
       path: '/processing'
       fullPath: '/processing'
       preLoaderRoute: typeof ProcessingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/assistant': {
+      id: '/assistant'
+      path: '/assistant'
+      fullPath: '/assistant'
+      preLoaderRoute: typeof AssistantRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -104,7 +151,9 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AssistantRoute: AssistantRoute,
   ProcessingRoute: ProcessingRoute,
+  ResultsRoute: ResultsRoute,
   UploadRoute: UploadRoute,
   ApiChatRoute: ApiChatRoute,
 }
