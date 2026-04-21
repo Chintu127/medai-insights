@@ -241,12 +241,14 @@ RULES:
 - If the medicine is unknown, return name with empty strings/arrays and safety_note: "Medicine not recognized. Verify spelling or consult a pharmacist."
 - Return ONLY the JSON.`;
 
+type JsonValue = string | number | boolean | null | { [k: string]: JsonValue } | JsonValue[];
+
 export const lookupMedicine = createServerFn({ method: "POST" })
   .inputValidator((raw: unknown) => MedicineRequestSchema.parse(raw))
-  .handler(async ({ data }): Promise<{ medicine: Record<string, unknown> | null; error: string | null }> => {
+  .handler(async ({ data }) => {
     const apiKey = process.env.LOVABLE_API_KEY;
     if (!apiKey) {
-      return { medicine: null, error: "LOVABLE_API_KEY is not configured" };
+      return { medicine: null as JsonValue, error: "LOVABLE_API_KEY is not configured" as string | null };
     }
     try {
       const res = await fetch(GATEWAY_URL, {
@@ -266,24 +268,24 @@ export const lookupMedicine = createServerFn({ method: "POST" })
       });
       if (!res.ok) {
         const body = await res.text();
-        if (res.status === 429) return { medicine: null, error: "Rate limit reached. Please wait." };
+        if (res.status === 429) return { medicine: null as JsonValue, error: "Rate limit reached. Please wait." as string | null };
         if (res.status === 402)
-          return { medicine: null, error: "AI credits exhausted. Add credits in Workspace > Usage." };
-        return { medicine: null, error: `Gateway error (${res.status}): ${body.slice(0, 200)}` };
+          return { medicine: null as JsonValue, error: "AI credits exhausted. Add credits in Workspace > Usage." as string | null };
+        return { medicine: null as JsonValue, error: `Gateway error (${res.status}): ${body.slice(0, 200)}` as string | null };
       }
       const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
       const content = json.choices?.[0]?.message?.content ?? "{}";
-      let parsed: Record<string, unknown> | null = null;
+      let parsed: JsonValue = null;
       try {
-        parsed = JSON.parse(content) as Record<string, unknown>;
+        parsed = JSON.parse(content) as JsonValue;
       } catch {
         const m = content.match(/\{[\s\S]*\}/);
-        parsed = m ? (JSON.parse(m[0]) as Record<string, unknown>) : null;
+        parsed = m ? (JSON.parse(m[0]) as JsonValue) : null;
       }
-      return { medicine: parsed, error: null };
+      return { medicine: parsed, error: null as string | null };
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       console.error("lookupMedicine failed:", message);
-      return { medicine: null, error: message };
+      return { medicine: null as JsonValue, error: message as string | null };
     }
   });
