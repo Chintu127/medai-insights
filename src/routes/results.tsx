@@ -5,13 +5,15 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
+  Download,
   FlaskConical,
   HeartPulse,
   Pill,
   Stethoscope,
 } from "lucide-react";
 import { useMedicalState } from "@/lib/medical-store";
-import type { AIAnalysisResult } from "@/lib/medical-types";
+import type { AIAnalysisResult, LabValue } from "@/lib/medical-types";
+import { generateMedicalReportPDF } from "@/lib/pdf-report";
 
 export const Route = createFileRoute("/results")({
   head: () => ({
