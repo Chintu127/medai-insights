@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Activity, Upload, MessageSquare, LayoutDashboard, Moon, Sun, Stethoscope } from "lucide-react";
+import { Activity, Upload, MessageSquare, LayoutDashboard, Moon, Sun, Stethoscope, Pill } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
 
@@ -7,11 +7,12 @@ const nav = [
   { to: "/", label: "Overview", icon: LayoutDashboard },
   { to: "/upload", label: "New Analysis", icon: Upload },
   { to: "/results", label: "Results", icon: Activity },
+  { to: "/medicines", label: "Medicines", icon: Pill },
   { to: "/assistant", label: "Assistant", icon: MessageSquare },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { theme, toggle } = useTheme();
+  const { theme, toggle, mounted } = useTheme();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   return (
@@ -52,8 +53,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             onClick={toggle}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-sidebar-accent text-sidebar-foreground"
           >
-            {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
-            {theme === "dark" ? "Light mode" : "Dark mode"}
+            {mounted ? (
+              <>
+                {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
+                {theme === "dark" ? "Light mode" : "Dark mode"}
+              </>
+            ) : (
+              <>
+                <Moon className="size-4" />
+                Theme
+              </>
+            )}
           </button>
         </div>
       </aside>
@@ -71,7 +81,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="size-9 rounded-lg border border-border flex items-center justify-center"
             aria-label="Toggle theme"
           >
-            {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
+            {mounted ? (
+              theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />
+            ) : (
+              <Moon className="size-4" />
+            )}
           </button>
         </header>
         <nav className="md:hidden flex border-b border-border bg-card overflow-x-auto">
