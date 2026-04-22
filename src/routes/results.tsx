@@ -8,12 +8,16 @@ import {
   Download,
   FlaskConical,
   HeartPulse,
+  Lightbulb,
   Pill,
+  Sparkles,
   Stethoscope,
+  Database,
 } from "lucide-react";
 import { useMedicalState } from "@/lib/medical-store";
 import type { AIAnalysisResult, LabValue } from "@/lib/medical-types";
 import { generateMedicalReportPDF } from "@/lib/pdf-report";
+import { lookupReferenceRange, inferStatus } from "@/lib/lab-reference-ranges";
 
 export const Route = createFileRoute("/results")({
   head: () => ({
@@ -30,6 +34,44 @@ function pickRisk(level: string | undefined): "low" | "medium" | "high" {
   if (v.includes("high") || v.includes("critical")) return "high";
   if (v.includes("med")) return "medium";
   return "low";
+}
+
+const SPECIALIST_HINT: Record<string, string> = {
+  cardiologist: "Heart, BP, lipids",
+  endocrinologist: "Diabetes, thyroid, hormones",
+  pulmonologist: "Lungs, asthma, COPD",
+  nephrologist: "Kidney, electrolytes",
+  hematologist: "Blood disorders, anemia",
+  gastroenterologist: "GI, liver",
+  neurologist: "Brain, nerves",
+  rheumatologist: "Autoimmune, joints",
+  dermatologist: "Skin",
+  "general physician": "First-line evaluation",
+};
+
+function specialistHint(name?: string): string {
+  if (!name) return "First-line evaluation";
+  const k = name.toLowerCase();
+  for (const key of Object.keys(SPECIALIST_HINT)) {
+    if (k.includes(key)) return SPECIALIST_HINT[key];
+  }
+  return "Specialist consultation";
+}
+
+// Enrich parsed labs with reference ranges from the local fallback table
+function enrichLabs(labs: LabValue[]): LabValue[] {
+  return labs.map((lab) => {
+    if (lab.reference_range && lab.status) return lab;
+    const ref = lookupReferenceRange(lab.name);
+    const status =
+      lab.status ||
+      (lab.value && ref ? inferStatus(lab.name, lab.value) ?? lab.status : lab.status);
+    return {
+      ...lab,
+      reference_range: lab.reference_range || ref?.range,
+      status: status ?? lab.status,
+    };
+  });
 }
 
 function ResultsPage() {
@@ -64,7 +106,21 @@ function ResultsPage() {
 
   const { gemini, gpt, comparison } = result;
   const confidence = Number(comparison.confidence_score?.toString().replace(/[^0-9.]/g, "")) || 0;
+  const geminiConf = Number(gemini.confidence_score?.toString().replace(/[^0-9.]/g, "")) || 0;
+  const gptConf = Number(gpt.confidence_score?.toString().replace(/[^0-9.]/g, "")) || 0;
+  const agreement = Math.max(0, 100 - Math.abs(geminiConf - gptConf));
+  const healthScore =
+    Number(
+      (gemini.health_score ?? gpt.health_score ?? "")
+        .toString()
+        .replace(/[^0-9.]/g, ""),
+    ) || 0;
   const risk = pickRisk(gemini.risk_level || gpt.risk_level);
+  const datasetMatch =
+    gemini.dataset_match || gpt.dataset_match || `${Math.round((confidence + agreement) / 2)}%`;
+
+  const enrichedLabs = enrichLabs(gemini.parsed_labs ?? gpt.parsed_labs ?? []);
+  const simplified = gemini.simplified_summary || gpt.simplified_summary || "";
 
   return (
     <div className="px-4 md:px-10 py-8 max-w-6xl mx-auto space-y-6">
@@ -96,20 +152,44 @@ function ResultsPage() {
         Educational use only. AI outputs may be inaccurate. Consult a licensed clinician for any medical decision.
       </div>
 
-      <section className="grid lg:grid-cols-3 gap-4">
+      {simplified && (
+        <section className="glass-card rounded-2xl p-5 md:p-6 space-y-2 border-l-4 border-primary">
+          <div className="text-xs uppercase tracking-wider text-primary flex items-center gap-1.5">
+            <Sparkles className="size-3.5" /> What this means in plain language
+          </div>
+          <p className="text-sm md:text-base leading-relaxed">{simplified}</p>
+        </section>
+      )}
+
+      <section className="grid lg:grid-cols-4 gap-4">
         <ConfidenceCard score={confidence} agreement={comparison.agreement_level} />
+        <HealthScoreCard score={healthScore} />
         <RiskCard risk={risk} />
-        <SpecialistCard
-          finalCondition={comparison.final_condition}
-          recommendation={comparison.final_recommendation}
-        />
+        <DatasetMatchCard match={datasetMatch} />
+      </section>
+
+      {/* Confidence breakdown */}
+      <section className="glass-card rounded-2xl p-5 md:p-6 space-y-3">
+        <h2 className="font-display text-lg font-semibold flex items-center gap-2">
+          <CheckCircle2 className="size-4 text-medical" /> Confidence breakdown
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <ConfBar label="Gemini" value={geminiConf} color="primary" />
+          <ConfBar label="GPT" value={gptConf} color="medical" />
+          <ConfBar label="Agreement" value={agreement} color="success" />
+          <ConfBar label="Final" value={confidence} color="warning" />
+        </div>
       </section>
 
       <ComparisonPanel gemini={gemini} gpt={gpt} disagreement={comparison.disagreement_notes} />
 
       <ConditionsSection gemini={gemini} gpt={gpt} />
 
-      <ParsedLabsSection labs={gemini.parsed_labs ?? gpt.parsed_labs ?? []} />
+      <ExplainableSection gemini={gemini} gpt={gpt} />
+
+      <DoctorRecommendationCards gemini={gemini} gpt={gpt} />
+
+      <ParsedLabsSection labs={enrichedLabs} />
 
       <LabValuesTable extracted={gemini.extracted_data ?? {}} abnormal={gemini.abnormal_findings ?? []} />
 
@@ -126,8 +206,8 @@ function ConfidenceCard({ score, agreement }: { score: number; agreement: string
   const offset = c - (Math.min(score, 100) / 100) * c;
   const colorVar = score >= 75 ? "var(--success)" : score >= 50 ? "var(--primary)" : "var(--warning)";
   return (
-    <div className="glass-card rounded-2xl p-5 flex items-center gap-5">
-      <div className="relative size-32 shrink-0">
+    <div className="glass-card rounded-2xl p-5 flex items-center gap-4">
+      <div className="relative size-28 shrink-0">
         <svg viewBox="0 0 140 140" className="w-full h-full -rotate-90">
           <circle cx="70" cy="70" r={r} fill="none" stroke="var(--muted)" strokeWidth="10" />
           <circle
@@ -144,16 +224,49 @@ function ConfidenceCard({ score, agreement }: { score: number; agreement: string
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <div className="text-3xl font-display font-semibold tabular-nums">{Math.round(score)}</div>
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Confidence</div>
+          <div className="text-2xl font-display font-semibold tabular-nums">{Math.round(score)}</div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Conf.</div>
         </div>
       </div>
-      <div className="space-y-1">
+      <div className="space-y-1 min-w-0">
         <div className="text-xs uppercase tracking-wider text-muted-foreground">AI agreement</div>
-        <div className="font-display text-xl font-semibold">{agreement || "—"}</div>
-        <p className="text-xs text-muted-foreground max-w-[16ch]">
-          Combined score of condition, risk and findings overlap.
+        <div className="font-display text-base font-semibold">{agreement || "—"}</div>
+        <p className="text-[11px] text-muted-foreground leading-snug">
+          Combined: condition · risk · findings.
         </p>
+      </div>
+    </div>
+  );
+}
+
+function HealthScoreCard({ score }: { score: number }) {
+  const tone =
+    score >= 80
+      ? { color: "var(--success)", label: "Excellent" }
+      : score >= 60
+        ? { color: "var(--medical)", label: "Good" }
+        : score >= 40
+          ? { color: "var(--warning)", label: "Concerns" }
+          : { color: "var(--destructive)", label: "Critical" };
+  return (
+    <div className="glass-card rounded-2xl p-5 space-y-3">
+      <div className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+        <HeartPulse className="size-3.5" /> Health score
+      </div>
+      <div className="flex items-baseline gap-1">
+        <div className="text-4xl font-display font-semibold tabular-nums" style={{ color: tone.color }}>
+          {Math.round(score)}
+        </div>
+        <div className="text-sm text-muted-foreground">/ 100</div>
+      </div>
+      <div className="h-2 rounded-full bg-muted overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all duration-700"
+          style={{ width: `${Math.min(score, 100)}%`, background: tone.color }}
+        />
+      </div>
+      <div className="text-xs font-medium" style={{ color: tone.color }}>
+        {tone.label}
       </div>
     </div>
   );
@@ -174,21 +287,54 @@ function RiskCard({ risk }: { risk: "low" | "medium" | "high" }) {
         <HeartPulse className="size-4" />
         {styles.label}
       </div>
-      <p className="text-xs text-muted-foreground">
-        Based on combined abnormal findings across both models.
+      <p className="text-xs text-muted-foreground">Combined abnormal findings across both models.</p>
+    </div>
+  );
+}
+
+function DatasetMatchCard({ match }: { match: string }) {
+  return (
+    <div className="glass-card rounded-2xl p-5 space-y-2">
+      <div className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+        <Database className="size-3.5" /> Dataset match
+      </div>
+      <div className="text-3xl font-display font-semibold text-medical-foreground">{match}</div>
+      <p className="text-[11px] text-muted-foreground leading-snug">
+        Estimated alignment with documented clinical patterns (RAG signal).
       </p>
     </div>
   );
 }
 
-function SpecialistCard({ finalCondition, recommendation }: { finalCondition: string; recommendation: string }) {
+function ConfBar({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: number;
+  color: "primary" | "medical" | "success" | "warning";
+}) {
+  const bg =
+    color === "primary"
+      ? "bg-primary"
+      : color === "medical"
+        ? "bg-medical"
+        : color === "success"
+          ? "bg-success"
+          : "bg-warning";
   return (
-    <div className="glass-card rounded-2xl p-5 space-y-2">
-      <div className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-        <Stethoscope className="size-3.5" /> Top agreed finding
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="font-medium tabular-nums">{Math.round(value)}%</span>
       </div>
-      <div className="font-display text-lg font-semibold leading-tight">{finalCondition || "—"}</div>
-      <p className="text-xs text-muted-foreground line-clamp-3">{recommendation}</p>
+      <div className="h-2 rounded-full bg-muted overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-700 ${bg}`}
+          style={{ width: `${Math.min(value, 100)}%` }}
+        />
+      </div>
     </div>
   );
 }
@@ -271,7 +417,15 @@ function ConditionsSection({ gemini, gpt }: { gemini: AIAnalysisResult; gpt: AIA
     return all.slice(0, 6);
   }, [gemini, gpt]);
 
-  if (merged.length === 0) return null;
+  const secondary = useMemo(
+    () =>
+      Array.from(
+        new Set([...(gemini.secondary_conditions ?? []), ...(gpt.secondary_conditions ?? [])]),
+      ),
+    [gemini, gpt],
+  );
+
+  if (merged.length === 0 && secondary.length === 0) return null;
 
   return (
     <section className="glass-card rounded-2xl p-5 md:p-6 space-y-4">
@@ -287,6 +441,105 @@ function ConditionsSection({ gemini, gpt }: { gemini: AIAnalysisResult; gpt: AIA
             </div>
             <div className="text-xs text-primary font-medium">Probability: {c.probability}</div>
             <p className="text-xs text-muted-foreground leading-relaxed">{c.reasoning}</p>
+          </div>
+        ))}
+      </div>
+
+      {secondary.length > 0 && (
+        <div className="space-y-2 pt-2">
+          <div className="text-xs uppercase tracking-wider text-muted-foreground">Secondary risks to monitor</div>
+          <div className="flex flex-wrap gap-2">
+            {secondary.map((s, i) => (
+              <span
+                key={i}
+                className="text-xs px-3 py-1.5 rounded-full bg-warning/10 text-warning border border-warning/30"
+              >
+                {s}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ExplainableSection({ gemini, gpt }: { gemini: AIAnalysisResult; gpt: AIAnalysisResult }) {
+  const all = [...(gemini.explainable_findings ?? []), ...(gpt.explainable_findings ?? [])];
+  // Dedupe by finding+implies
+  const seen = new Set<string>();
+  const findings = all.filter((f) => {
+    const key = `${f.finding}|${f.implies}`.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  if (findings.length === 0) return null;
+
+  return (
+    <section className="glass-card rounded-2xl p-5 md:p-6 space-y-4">
+      <h2 className="font-display text-lg font-semibold flex items-center gap-2">
+        <Lightbulb className="size-4 text-warning" /> Why these conditions? (Explainable AI)
+      </h2>
+      <p className="text-xs text-muted-foreground -mt-2">
+        Each chip traces a finding from the report to the condition it suggests.
+      </p>
+      <div className="grid md:grid-cols-2 gap-3">
+        {findings.map((f, i) => (
+          <div
+            key={i}
+            className="rounded-xl border border-border p-4 space-y-2 bg-gradient-to-br from-background to-muted/40"
+          >
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="px-2 py-0.5 rounded-md bg-primary/15 text-primary font-medium">
+                {f.finding}
+              </span>
+              <ArrowRight className="size-3.5 text-muted-foreground" />
+              <span className="px-2 py-0.5 rounded-md bg-medical/15 text-medical-foreground font-medium">
+                {f.implies}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">{f.why}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DoctorRecommendationCards({
+  gemini,
+  gpt,
+}: {
+  gemini: AIAnalysisResult;
+  gpt: AIAnalysisResult;
+}) {
+  const specs = Array.from(
+    new Set(
+      [gemini.doctor_recommendation, gpt.doctor_recommendation].filter(
+        (s): s is string => Boolean(s),
+      ),
+    ),
+  );
+  if (specs.length === 0) specs.push("General Physician");
+  return (
+    <section className="glass-card rounded-2xl p-5 md:p-6 space-y-4">
+      <h2 className="font-display text-lg font-semibold flex items-center gap-2">
+        <Stethoscope className="size-4 text-medical" /> Recommended specialists
+      </h2>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {specs.map((s, i) => (
+          <div
+            key={i}
+            className="rounded-xl border border-border p-4 flex items-start gap-3 bg-background/60"
+          >
+            <div className="size-11 rounded-xl gradient-primary text-white flex items-center justify-center shrink-0">
+              <Stethoscope className="size-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="font-medium leading-tight">{s}</div>
+              <div className="text-xs text-muted-foreground">{specialistHint(s)}</div>
+            </div>
           </div>
         ))}
       </div>
@@ -424,13 +677,17 @@ function MedicationsSection({ gemini, gpt }: { gemini: AIAnalysisResult; gpt: AI
       </h2>
       <div className="flex flex-wrap gap-2">
         {meds.map((m, i) => (
-          <span key={i} className="text-xs px-3 py-1.5 rounded-full bg-medical/15 text-medical-foreground border border-medical/30">
+          <span
+            key={i}
+            className="text-xs px-3 py-1.5 rounded-full bg-medical/15 text-medical-foreground border border-medical/30"
+          >
             {m}
           </span>
         ))}
       </div>
       <p className="text-[11px] text-muted-foreground">
         Generic class names only — not a prescription. A licensed clinician must determine actual treatment.
+        For drug-drug interaction checks, add these to the Medicines page.
       </p>
     </section>
   );

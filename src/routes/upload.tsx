@@ -1,8 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useRef, useState } from "react";
-import { Upload, FileImage, Loader2, X, User, Activity, FileText } from "lucide-react";
+import { Upload, FileImage, Loader2, X, User, Activity, FileText, Plus } from "lucide-react";
 import { medicalStore } from "@/lib/medical-store";
-import type { PatientProfile } from "@/lib/medical-types";
+import type { PatientProfile, LabAttachment } from "@/lib/medical-types";
 import { analyzeMedical } from "@/server/medical-analysis.functions";
 import { useServerFn } from "@tanstack/react-start";
 
@@ -10,7 +10,7 @@ export const Route = createFileRoute("/upload")({
   head: () => ({
     meta: [
       { title: "New Analysis — MedAI" },
-      { name: "description", content: "Submit patient profile, symptoms and a lab report for dual-AI analysis." },
+      { name: "description", content: "Submit patient profile, symptoms and one or more lab reports for dual-AI analysis." },
       { property: "og:title", content: "New Analysis — MedAI" },
       { property: "og:description", content: "Submit your data for a dual-AI second opinion." },
     ],
@@ -18,7 +18,8 @@ export const Route = createFileRoute("/upload")({
   component: UploadPage,
 });
 
-const MAX_BYTES = 6 * 1024 * 1024;
+const MAX_FILE_BYTES = 6 * 1024 * 1024;
+const MAX_FILES = 5;
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((res, rej) => {
@@ -45,55 +46,72 @@ function UploadPage() {
   });
   const [symptoms, setSymptoms] = useState("");
   const [labText, setLabText] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = (f: File | null) => {
+  const addFiles = (incoming: FileList | File[] | null) => {
     setError(null);
-    if (!f) {
-      setFile(null);
-      return;
+    if (!incoming) return;
+    const list = Array.from(incoming);
+    const accepted: File[] = [];
+    for (const f of list) {
+      if (files.length + accepted.length >= MAX_FILES) {
+        setError(`Maximum ${MAX_FILES} files.`);
+        break;
+      }
+      if (f.size > MAX_FILE_BYTES) {
+        setError(`"${f.name}" too large (max 6 MB).`);
+        continue;
+      }
+      if (!/^image\//.test(f.type) && f.type !== "application/pdf") {
+        setError(`"${f.name}" is not an image or PDF.`);
+        continue;
+      }
+      accepted.push(f);
     }
-    if (f.size > MAX_BYTES) {
-      setError("File too large (max 6 MB).");
-      return;
-    }
-    if (!/^image\//.test(f.type) && f.type !== "application/pdf") {
-      setError("Only image or PDF files are supported.");
-      return;
-    }
-    setFile(f);
+    if (accepted.length) setFiles((prev) => [...prev, ...accepted]);
   };
+
+  const removeFile = (idx: number) => setFiles((prev) => prev.filter((_, i) => i !== idx));
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-    handleFile(e.dataTransfer.files?.[0] ?? null);
-  }, []);
+    addFiles(e.dataTransfer.files);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files]);
 
   const onSubmit = async () => {
     setError(null);
-    if (!symptoms.trim() && !labText.trim() && !file) {
-      setError("Please provide symptoms, lab text, or a lab report file.");
+    if (!symptoms.trim() && !labText.trim() && files.length === 0) {
+      setError("Please provide symptoms, lab text, or at least one lab report file.");
       return;
     }
     setSubmitting(true);
-    let labReportImageBase64: string | undefined;
-    let labReportMimeType: string | undefined;
     try {
-      if (file && file.type.startsWith("image/")) {
-        labReportImageBase64 = await fileToBase64(file);
-        labReportMimeType = file.type;
+      const labAttachments: LabAttachment[] = [];
+      for (const f of files) {
+        if (f.type.startsWith("image/")) {
+          const base64 = await fileToBase64(f);
+          labAttachments.push({ base64, mimeType: f.type, name: f.name });
+        }
+        // PDFs without OCR support: name is added to text context
       }
+      const pdfNames = files.filter((f) => f.type === "application/pdf").map((f) => f.name);
+      const augmentedText =
+        labText +
+        (pdfNames.length
+          ? `\n\n[Attached PDF files (text not extracted client-side): ${pdfNames.join(", ")}]`
+          : "");
+
       const request = {
         patient,
         symptoms,
-        labReportText: labText || undefined,
-        labReportImageBase64,
-        labReportMimeType,
+        labReportText: augmentedText || undefined,
+        labAttachments: labAttachments.length ? labAttachments : undefined,
       };
       medicalStore.set({
         status: "processing",
@@ -105,7 +123,6 @@ function UploadPage() {
       });
       navigate({ to: "/processing" });
 
-      // kick off analysis
       const tick = setInterval(() => {
         const s = medicalStore.getState();
         if (s.status !== "processing") return clearInterval(tick);
@@ -159,7 +176,7 @@ function UploadPage() {
       <header className="space-y-2">
         <h1 className="font-display text-2xl md:text-3xl font-semibold">New Analysis</h1>
         <p className="text-sm text-muted-foreground">
-          Provide patient context, symptoms, and the lab report. Both AIs receive identical input.
+          Provide patient context, symptoms, and one or more lab reports. Both AIs receive identical input.
         </p>
       </header>
 
@@ -191,8 +208,11 @@ function UploadPage() {
       </section>
 
       <section className="glass-card rounded-2xl p-5 md:p-7 space-y-4">
-        <div className="flex items-center gap-2 text-sm font-medium text-primary">
-          <FileText className="size-4" /> Lab report
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm font-medium text-primary">
+            <FileText className="size-4" /> Lab reports
+          </div>
+          <span className="text-[11px] text-muted-foreground">{files.length}/{MAX_FILES} files</span>
         </div>
 
         <div
@@ -203,7 +223,7 @@ function UploadPage() {
           onDragLeave={() => setDragOver(false)}
           onDrop={onDrop}
           onClick={() => inputRef.current?.click()}
-          className={`relative cursor-pointer rounded-2xl border-2 border-dashed transition-all p-6 md:p-10 text-center ${
+          className={`relative cursor-pointer rounded-2xl border-2 border-dashed transition-all p-6 md:p-8 text-center ${
             dragOver
               ? "border-primary bg-primary/5"
               : "border-border hover:border-primary/60 hover:bg-muted/40"
@@ -212,35 +232,51 @@ function UploadPage() {
           <input
             ref={inputRef}
             type="file"
+            multiple
             accept="image/*,application/pdf"
             className="hidden"
-            onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => addFiles(e.target.files)}
           />
-          {file ? (
-            <div className="flex items-center justify-center gap-3">
-              <FileImage className="size-6 text-primary" />
-              <span className="text-sm font-medium">{file.name}</span>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setFile(null);
-                }}
-                className="size-7 rounded-full hover:bg-muted flex items-center justify-center"
-                aria-label="Remove"
-              >
-                <X className="size-4" />
-              </button>
+          <div className="space-y-2">
+            <div className="mx-auto size-12 rounded-2xl gradient-primary text-white flex items-center justify-center">
+              <Upload className="size-5" />
             </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="mx-auto size-12 rounded-2xl gradient-primary text-white flex items-center justify-center">
-                <Upload className="size-5" />
-              </div>
-              <p className="text-sm font-medium">Drag & drop your lab report</p>
-              <p className="text-xs text-muted-foreground">JPG, PNG or PDF · max 6 MB</p>
-            </div>
-          )}
+            <p className="text-sm font-medium">Drag & drop multiple lab reports</p>
+            <p className="text-xs text-muted-foreground">JPG, PNG or PDF · max 6 MB each · up to {MAX_FILES} files</p>
+          </div>
         </div>
+
+        {files.length > 0 && (
+          <ul className="space-y-2">
+            {files.map((f, i) => (
+              <li
+                key={`${f.name}-${i}`}
+                className="flex items-center gap-3 rounded-xl border border-border bg-background/60 px-3 py-2"
+              >
+                <FileImage className="size-4 text-primary shrink-0" />
+                <span className="text-sm truncate flex-1">{f.name}</span>
+                <span className="text-[11px] text-muted-foreground tabular-nums">
+                  {(f.size / 1024).toFixed(0)} KB
+                </span>
+                <button
+                  onClick={() => removeFile(i)}
+                  className="size-7 rounded-full hover:bg-muted flex items-center justify-center"
+                  aria-label="Remove"
+                >
+                  <X className="size-4" />
+                </button>
+              </li>
+            ))}
+            <li>
+              <button
+                onClick={() => inputRef.current?.click()}
+                className="text-xs inline-flex items-center gap-1 text-primary hover:underline"
+              >
+                <Plus className="size-3.5" /> Add more files
+              </button>
+            </li>
+          </ul>
+        )}
 
         <div className="text-xs text-muted-foreground -mt-1">— or paste lab values as text —</div>
         <textarea

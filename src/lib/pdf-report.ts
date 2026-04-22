@@ -1,5 +1,21 @@
 import { jsPDF } from "jspdf";
-import type { DualAIResponse, AnalysisRequest } from "./medical-types";
+import type { DualAIResponse, AnalysisRequest, LabValue } from "./medical-types";
+import { lookupReferenceRange, inferStatus } from "./lab-reference-ranges";
+
+function enrichLabs(labs: LabValue[]): LabValue[] {
+  return labs.map((lab) => {
+    if (lab.reference_range && lab.status) return lab;
+    const ref = lookupReferenceRange(lab.name);
+    const status =
+      lab.status ||
+      (lab.value && ref ? inferStatus(lab.name, lab.value) ?? lab.status : lab.status);
+    return {
+      ...lab,
+      reference_range: lab.reference_range || ref?.range,
+      status: status ?? lab.status,
+    };
+  });
+}
 
 export function generateMedicalReportPDF(
   result: DualAIResponse,
@@ -29,7 +45,10 @@ export function generateMedicalReportPDF(
     doc.setTextColor(40, 40, 40);
   };
 
-  const addText = (text: string, opts: { size?: number; bold?: boolean; color?: [number, number, number] } = {}) => {
+  const addText = (
+    text: string,
+    opts: { size?: number; bold?: boolean; color?: [number, number, number] } = {},
+  ) => {
     const size = opts.size ?? 10;
     doc.setFont("helvetica", opts.bold ? "bold" : "normal");
     doc.setFontSize(size);
@@ -111,9 +130,17 @@ export function generateMedicalReportPDF(
   addText(`Confidence score: ${comparison.confidence_score || "—"} / 100`);
   addText(`Agreement level: ${comparison.agreement_level || "—"}`);
   addText(`Risk level: ${gemini.risk_level || gpt.risk_level || "—"}`);
+  const hs = gemini.health_score || gpt.health_score;
+  if (hs) addText(`Health score: ${hs} / 100`);
   if (comparison.final_recommendation) {
     y += 2;
     addText(`Recommendation: ${comparison.final_recommendation}`);
+  }
+  const simplified = gemini.simplified_summary || gpt.simplified_summary;
+  if (simplified) {
+    y += 4;
+    addText("Plain-language summary:", { bold: true });
+    addText(simplified);
   }
   divider();
 
@@ -129,13 +156,36 @@ export function generateMedicalReportPDF(
     if (c.reasoning) addText(c.reasoning);
     y += 2;
   }
+  const secondary = Array.from(
+    new Set([...(gemini.secondary_conditions ?? []), ...(gpt.secondary_conditions ?? [])]),
+  );
+  if (secondary.length) {
+    y += 2;
+    addText("Secondary risks to monitor:", { bold: true });
+    addBullets(secondary);
+  }
   divider();
 
-  // ===== Lab values =====
+  // ===== Explainable AI =====
+  const explainables = [
+    ...(gemini.explainable_findings ?? []),
+    ...(gpt.explainable_findings ?? []),
+  ];
+  if (explainables.length) {
+    addHeading("Why these conditions? (Explainable AI)");
+    for (const f of explainables) {
+      addText(`${f.finding}  →  ${f.implies}`, { bold: true });
+      if (f.why) addText(f.why, { color: [90, 90, 90] });
+      y += 2;
+    }
+    divider();
+  }
+
+  // ===== Lab values (with reference range fallback) =====
   addHeading("Lab values");
-  const parsedLabs = (gemini.parsed_labs?.length ? gemini.parsed_labs : gpt.parsed_labs) ?? [];
+  const rawLabs = (gemini.parsed_labs?.length ? gemini.parsed_labs : gpt.parsed_labs) ?? [];
+  const parsedLabs = enrichLabs(rawLabs);
   if (parsedLabs.length > 0) {
-    // table header
     ensureSpace(20);
     doc.setFillColor(240, 246, 255);
     doc.rect(margin, y - 2, contentWidth, 16, "F");
@@ -164,7 +214,7 @@ export function generateMedicalReportPDF(
       doc.setTextColor(40, 40, 40);
       y += 14;
       if (lab.interpretation) {
-        addText(`   ↳ ${lab.interpretation}`, { size: 8, color: [110, 110, 110] });
+        addText(`   ${lab.interpretation}`, { size: 8, color: [110, 110, 110] });
       }
     }
   } else {
@@ -196,6 +246,11 @@ export function generateMedicalReportPDF(
     y += 4;
     addText("Disagreement notes:", { bold: true });
     addText(comparison.disagreement_notes);
+  }
+  const dsMatch = gemini.dataset_match || gpt.dataset_match;
+  if (dsMatch) {
+    y += 4;
+    addText(`Dataset match: ${dsMatch}`, { bold: true });
   }
   divider();
 
