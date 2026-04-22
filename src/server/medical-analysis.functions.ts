@@ -468,25 +468,25 @@ export const checkDrugInteractions = createServerFn({ method: "POST" })
       });
       if (!res.ok) {
         const body = await res.text();
-        return { interactions: [], summary: "", error: `Gateway error (${res.status}): ${body.slice(0, 200)}` };
+        return { interactions: empty, summary: "", error: `Gateway error (${res.status}): ${body.slice(0, 200)}` };
       }
       const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
       const content = json.choices?.[0]?.message?.content ?? "{}";
-      let parsed: { interactions?: unknown[]; summary?: string } = {};
+      let parsed: { interactions?: JsonValue[]; summary?: string } = {};
       try {
-        parsed = JSON.parse(content);
+        parsed = JSON.parse(content) as typeof parsed;
       } catch {
         const m = content.match(/\{[\s\S]*\}/);
-        if (m) parsed = JSON.parse(m[0]);
+        if (m) parsed = JSON.parse(m[0]) as typeof parsed;
       }
       return {
-        interactions: Array.isArray(parsed.interactions) ? parsed.interactions : [],
+        interactions: Array.isArray(parsed.interactions) ? (parsed.interactions as JsonValue[]) : empty,
         summary: parsed.summary ?? "",
         error: null as string | null,
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       console.error("checkDrugInteractions failed:", message);
-      return { interactions: [], summary: "", error: message };
+      return { interactions: empty, summary: "", error: message };
     }
   });
