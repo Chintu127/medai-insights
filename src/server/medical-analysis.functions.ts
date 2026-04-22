@@ -451,7 +451,8 @@ export const checkDrugInteractions = createServerFn({ method: "POST" })
   .inputValidator((raw: unknown) => InteractionSchema.parse(raw))
   .handler(async ({ data }) => {
     const apiKey = process.env.LOVABLE_API_KEY;
-    if (!apiKey) return { interactions: [], summary: "", error: "LOVABLE_API_KEY is not configured" as string | null };
+    const empty: JsonValue[] = [];
+    if (!apiKey) return { interactions: empty, summary: "", error: "LOVABLE_API_KEY is not configured" as string | null };
     try {
       const res = await fetch(GATEWAY_URL, {
         method: "POST",
