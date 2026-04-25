@@ -745,3 +745,152 @@ function RecommendationsSection({ gemini, gpt }: { gemini: AIAnalysisResult; gpt
     </section>
   );
 }
+
+function ClinicalAnalysisSection({ clinical }: { clinical: ClinicalAnalysis }) {
+  if (!clinical.analysis.length) return null;
+  const { summary } = clinical;
+  const overallStyle =
+    summary.overall_status === "Healthy"
+      ? "bg-success/15 text-success border-success/30"
+      : summary.overall_status === "Mild Concerns"
+        ? "bg-warning/15 text-warning border-warning/30"
+        : summary.overall_status === "Needs Medical Attention"
+          ? "bg-warning/20 text-warning border-warning/40"
+          : "bg-destructive/15 text-destructive border-destructive/40";
+
+  const statusBadge = (s: ClinicalParam["status"]) => {
+    if (s === "CRITICAL") return "bg-destructive/20 text-destructive border-destructive/30";
+    if (s === "HIGH") return "bg-warning/20 text-warning border-warning/30";
+    if (s === "LOW") return "bg-primary/15 text-primary border-primary/30";
+    return "bg-success/15 text-success border-success/30";
+  };
+  const sevBadge = (s: ClinicalParam["severity"]) => {
+    if (s === "Severe") return "bg-destructive/20 text-destructive";
+    if (s === "Moderate") return "bg-warning/20 text-warning";
+    if (s === "Mild") return "bg-primary/15 text-primary";
+    return "bg-muted text-muted-foreground";
+  };
+
+  return (
+    <section className="glass-card rounded-2xl p-5 md:p-6 space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="font-display text-lg font-semibold flex items-center gap-2">
+            <Stethoscope className="size-4 text-medical" /> Clinical analysis
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Per-parameter status · risk · severity — derived from your lab values.
+          </p>
+        </div>
+        <span className={`text-xs px-3 py-1.5 rounded-full border font-medium ${overallStyle}`}>
+          {summary.overall_status}
+        </span>
+      </div>
+
+      {/* Severity gauge */}
+      <div className="space-y-2">
+        <div className="flex justify-between text-xs text-muted-foreground">
+          <span>Severity score</span>
+          <span className="tabular-nums font-medium text-foreground">{summary.severity_score} / 100</span>
+        </div>
+        <div className="h-2 rounded-full bg-muted overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-700"
+            style={{
+              width: `${summary.severity_score}%`,
+              background:
+                summary.severity_score >= 70
+                  ? "var(--destructive)"
+                  : summary.severity_score >= 40
+                    ? "var(--warning)"
+                    : summary.severity_score > 0
+                      ? "var(--primary)"
+                      : "var(--success)",
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Issues / Normals chips */}
+      <div className="grid md:grid-cols-2 gap-3">
+        <div className="rounded-xl border border-border p-3 space-y-2">
+          <div className="text-xs uppercase tracking-wider text-muted-foreground">Detected issues</div>
+          {summary.issues.length ? (
+            <div className="flex flex-wrap gap-1.5">
+              {summary.issues.map((i, idx) => (
+                <span key={idx} className="text-[11px] px-2 py-1 rounded-full bg-destructive/10 text-destructive border border-destructive/20">
+                  {i}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-success">No abnormalities detected.</p>
+          )}
+        </div>
+        <div className="rounded-xl border border-border p-3 space-y-2">
+          <div className="text-xs uppercase tracking-wider text-muted-foreground">Normal parameters</div>
+          {summary.normal_parameters.length ? (
+            <div className="flex flex-wrap gap-1.5">
+              {summary.normal_parameters.map((n, idx) => (
+                <span key={idx} className="text-[11px] px-2 py-1 rounded-full bg-success/10 text-success border border-success/20">
+                  {n}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">—</p>
+          )}
+        </div>
+      </div>
+
+      {/* Per-parameter table */}
+      <div className="overflow-x-auto -mx-2">
+        <table className="w-full text-sm min-w-[720px]">
+          <thead>
+            <tr className="text-left text-xs uppercase text-muted-foreground border-b border-border">
+              <th className="px-3 py-2 font-medium">Parameter</th>
+              <th className="px-3 py-2 font-medium">Value</th>
+              <th className="px-3 py-2 font-medium">Range</th>
+              <th className="px-3 py-2 font-medium">Status</th>
+              <th className="px-3 py-2 font-medium">Risk</th>
+              <th className="px-3 py-2 font-medium">Severity</th>
+              <th className="px-3 py-2 font-medium text-right">Δ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {clinical.analysis.map((p, i) => (
+              <tr key={i} className="border-b border-border/60 last:border-0 align-top">
+                <td className="px-3 py-2 font-medium">{p.name}</td>
+                <td className="px-3 py-2 font-mono whitespace-nowrap">
+                  {p.value}{p.unit ? ` ${p.unit}` : ""}
+                </td>
+                <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                  {p.reference_range || "—"}
+                </td>
+                <td className="px-3 py-2">
+                  <span className={`text-[11px] px-2 py-0.5 rounded-full border ${statusBadge(p.status)}`}>
+                    {p.status}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-xs">{p.risk}</td>
+                <td className="px-3 py-2">
+                  <span className={`text-[11px] px-2 py-0.5 rounded-full ${sevBadge(p.severity)}`}>
+                    {p.severity}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums text-xs text-muted-foreground">
+                  {p.deviation_pct ? `${p.deviation_pct > 0 ? "+" : ""}${p.deviation_pct}%` : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 text-sm flex items-start gap-2">
+        <Lightbulb className="size-4 mt-0.5 text-primary shrink-0" />
+        <span>{clinical.recommendation}</span>
+      </div>
+    </section>
+  );
+}
