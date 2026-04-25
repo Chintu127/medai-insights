@@ -18,6 +18,7 @@ import { useMedicalState } from "@/lib/medical-store";
 import type { AIAnalysisResult, LabValue } from "@/lib/medical-types";
 import { generateMedicalReportPDF } from "@/lib/pdf-report";
 import { lookupReferenceRange, inferStatus } from "@/lib/lab-reference-ranges";
+import { buildClinicalAnalysis, type ClinicalAnalysis, type ClinicalParam } from "@/lib/clinical-analysis";
 
 export const Route = createFileRoute("/results")({
   head: () => ({
