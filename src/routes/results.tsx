@@ -121,6 +121,7 @@ function ResultsPage() {
     gemini.dataset_match || gpt.dataset_match || `${Math.round((confidence + agreement) / 2)}%`;
 
   const enrichedLabs = enrichLabs(gemini.parsed_labs ?? gpt.parsed_labs ?? []);
+  const clinical = useMemo(() => buildClinicalAnalysis(enrichedLabs), [enrichedLabs]);
   const simplified = gemini.simplified_summary || gpt.simplified_summary || "";
 
   return (
