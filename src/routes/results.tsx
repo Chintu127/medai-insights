@@ -191,6 +191,8 @@ function ResultsPage() {
 
       <DoctorRecommendationCards gemini={gemini} gpt={gpt} />
 
+      <ClinicalAnalysisSection clinical={clinical} />
+
       <ParsedLabsSection labs={enrichedLabs} />
 
       <LabValuesTable extracted={gemini.extracted_data ?? {}} abnormal={gemini.abnormal_findings ?? []} />
