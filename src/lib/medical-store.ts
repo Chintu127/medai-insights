@@ -38,6 +38,15 @@ export const medicalStore = {
     state = { ...state, ...partial };
     notify();
   },
+  setError(message: string) {
+    state = { ...state, status: "error", error: message, progress: 0, stage: "Failed" };
+    notify();
+  },
+  clearError() {
+    if (state.status !== "error") return;
+    state = { ...state, status: "idle", error: null, progress: 0, stage: "Idle" };
+    notify();
+  },
   reset() {
     state = initial;
     notify();
