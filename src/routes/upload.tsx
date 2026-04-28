@@ -16,6 +16,15 @@ export const Route = createFileRoute("/upload")({
     ],
   }),
   component: UploadPage,
+  errorComponent: ({ error, reset }) => (
+    <div className="px-4 md:px-10 py-16 max-w-2xl mx-auto text-center space-y-4">
+      <h1 className="font-display text-2xl font-semibold">Upload form error</h1>
+      <p className="text-sm text-muted-foreground break-words">{error.message}</p>
+      <button onClick={reset} className="px-4 h-10 rounded-lg bg-primary text-primary-foreground text-sm font-medium">
+        Try again
+      </button>
+    </div>
+  ),
 });
 
 const MAX_FILE_BYTES = 6 * 1024 * 1024;

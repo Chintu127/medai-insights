@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useMemo } from "react";
 import {
   Activity,
@@ -28,7 +28,41 @@ export const Route = createFileRoute("/results")({
     ],
   }),
   component: ResultsPage,
+  errorComponent: ResultsErrorComponent,
+  notFoundComponent: () => (
+    <div className="px-4 md:px-10 py-16 max-w-3xl mx-auto text-center space-y-3">
+      <h1 className="font-display text-2xl font-semibold">Results not found</h1>
+      <p className="text-sm text-muted-foreground">Try running a new analysis.</p>
+      <Link to="/upload" className="inline-flex items-center gap-2 px-5 h-11 rounded-xl gradient-primary text-white font-medium glow">
+        Start analysis
+      </Link>
+    </div>
+  ),
 });
+
+function ResultsErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+  const router = useRouter();
+  return (
+    <div className="px-4 md:px-10 py-16 max-w-3xl mx-auto text-center space-y-4">
+      <div className="size-14 rounded-2xl bg-destructive/10 text-destructive mx-auto flex items-center justify-center">
+        <AlertTriangle className="size-6" />
+      </div>
+      <h1 className="font-display text-2xl font-semibold">Couldn't render results</h1>
+      <p className="text-sm text-muted-foreground break-words">{error.message || "Unexpected error while displaying results."}</p>
+      <div className="flex gap-3 justify-center">
+        <button
+          onClick={() => { router.invalidate(); reset(); }}
+          className="px-4 h-10 rounded-lg bg-primary text-primary-foreground text-sm font-medium"
+        >
+          Try again
+        </button>
+        <Link to="/upload" className="px-4 h-10 inline-flex items-center rounded-lg border border-input text-sm">
+          New analysis
+        </Link>
+      </div>
+    </div>
+  );
+}
 
 function pickRisk(level: string | undefined): "low" | "medium" | "high" {
   const v = (level ?? "").toLowerCase();

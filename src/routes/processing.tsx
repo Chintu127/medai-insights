@@ -1,7 +1,7 @@
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link, useRouter } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { Activity, AlertTriangle } from "lucide-react";
-import { useMedicalState } from "@/lib/medical-store";
+import { medicalStore, useMedicalState } from "@/lib/medical-store";
 
 export const Route = createFileRoute("/processing")({
   head: () => ({
@@ -11,6 +11,29 @@ export const Route = createFileRoute("/processing")({
     ],
   }),
   component: ProcessingPage,
+  errorComponent: ({ error, reset }) => {
+    const router = useRouter();
+    return (
+      <div className="px-4 md:px-10 py-16 max-w-2xl mx-auto text-center space-y-4">
+        <div className="size-14 rounded-2xl bg-destructive/10 text-destructive mx-auto flex items-center justify-center">
+          <AlertTriangle className="size-6" />
+        </div>
+        <h1 className="font-display text-2xl font-semibold">Processing screen crashed</h1>
+        <p className="text-sm text-muted-foreground break-words">{error.message}</p>
+        <div className="flex gap-3 justify-center">
+          <button
+            onClick={() => { medicalStore.reset(); router.invalidate(); reset(); }}
+            className="px-4 h-10 rounded-lg bg-primary text-primary-foreground text-sm font-medium"
+          >
+            Reset & retry
+          </button>
+          <Link to="/upload" className="px-4 h-10 inline-flex items-center rounded-lg border border-input text-sm">
+            New analysis
+          </Link>
+        </div>
+      </div>
+    );
+  },
 });
 
 function ProcessingPage() {
